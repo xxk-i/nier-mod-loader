@@ -1,0 +1,3 @@
+LIBRARY D3D11
+EXPORTS
+    D3D11CreateDevice   @7

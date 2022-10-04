@@ -3,16 +3,43 @@ mod config;
 
 extern crate core;
 
-use std::{env, thread, time};
+use std::{env, mem, ptr, thread, time};
+use std::ffi::CString;
 use std::path::{Path, PathBuf};
+use std::ptr::null_mut;
 use winapi::shared::minwindef;
-use winapi::shared::minwindef::{ BOOL, DWORD, HINSTANCE, LPVOID };
-use winapi::um::libloaderapi::{ GetModuleHandleA };
-use winapi::shared::ntdef::{ NULL };
+use winapi::shared::minwindef::{BOOL, DWORD, HINSTANCE, HMODULE, LPVOID, UINT};
+use winapi::um::libloaderapi::{GetModuleHandleA, GetProcAddress, LoadLibraryA};
+use winapi::shared::ntdef::{HRESULT, NULL};
 use dll_syringe::{ Syringe, process::OwnedProcess };
 use winapi::um::winnt::LPCSTR;
 use glob::glob;
+use winapi::shared::dxgi::IDXGIAdapter;
 use winapi::um::consoleapi;
+use winapi::um::d3d11::{ID3D11Device, ID3D11DeviceContext};
+use winapi::um::d3dcommon::{D3D_DRIVER_TYPE, D3D_FEATURE_LEVEL};
+
+type _D3D11CreateDevice = extern "stdcall" fn(*mut IDXGIAdapter, D3D_DRIVER_TYPE, HMODULE, UINT, *const D3D_FEATURE_LEVEL, UINT, UINT, *mut *mut ID3D11Device, *mut D3D_FEATURE_LEVEL, *mut *mut ID3D11DeviceContext) -> HRESULT;
+
+static mut hOriginal: HINSTANCE = ptr::null_mut();
+static mut pD3D11CreateDevice: Option<_D3D11CreateDevice> = None;
+
+#[no_mangle]
+pub unsafe extern "system" fn D3D11CreateDevice(pAdapter: *mut IDXGIAdapter,
+                                                DriverType: D3D_DRIVER_TYPE,
+                                                Software: HMODULE,
+                                                Flags: UINT,
+                                                pFeatureLevels: *const D3D_FEATURE_LEVEL,
+                                                FeatureLevels: UINT,
+                                                SDKVersion: UINT,
+                                                ppDevice: *mut *mut ID3D11Device,
+                                                pFeatureLevel: *mut D3D_FEATURE_LEVEL,
+                                                ppImmediateContext: *mut *mut ID3D11DeviceContext) -> HRESULT {
+    match pD3D11CreateDevice {
+        Some(func) => return func(pAdapter, DriverType, Software, Flags, pFeatureLevels, FeatureLevels, SDKVersion, ppDevice, pFeatureLevel, ppImmediateContext),
+        None => panic!("Failed to get original D3D11CreateDevice handle!")
+    }
+}
 
 #[no_mangle]
 #[allow(non_snake_case, unused_variables)]
@@ -91,12 +118,18 @@ fn load_plugins(dll_list: Vec<PathBuf>) {
 }
 
 fn initialize() {
+    unsafe {
+        consoleapi::AllocConsole();
+
+        hOriginal = LoadLibraryA(CString::new("C:\\Windows\\System32\\d3d11.dll").unwrap().as_ptr());
+        pD3D11CreateDevice = Some(mem::transmute(GetProcAddress(hOriginal, CString::new("D3D11CreateDevice").unwrap().as_ptr())));
+    }
+
     //let the game set the environment to data\\ for us...
     while !env::current_dir().unwrap().ends_with("data") {
         thread::sleep(time::Duration::from_millis(100));
     }
 
-    unsafe { consoleapi::AllocConsole(); }
     println!("Initializing...");
 
     let dll_list: Option<Vec<PathBuf>> = get_dlls();
