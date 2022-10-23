@@ -5,6 +5,7 @@ extern crate core;
 
 use std::{env, mem, ptr, thread, time};
 use std::ffi::CString;
+use std::fs::File;
 use std::path::{Path, PathBuf};
 use std::ptr::null_mut;
 use winapi::shared::minwindef;
@@ -16,6 +17,7 @@ use winapi::um::winnt::LPCSTR;
 use glob::glob;
 use winapi::shared::dxgi::IDXGIAdapter;
 use winapi::um::consoleapi;
+use winapi::um::consoleapi::AllocConsole;
 use winapi::um::d3d11::{ID3D11Device, ID3D11DeviceContext};
 use winapi::um::d3dcommon::{D3D_DRIVER_TYPE, D3D_FEATURE_LEVEL};
 
@@ -119,8 +121,9 @@ fn load_plugins(dll_list: Vec<PathBuf>) {
 
 fn initialize() {
     unsafe {
-        consoleapi::AllocConsole();
-
+        if cfg!(debug_assertions) {
+            AllocConsole();
+        }
         hOriginal = LoadLibraryA(CString::new("C:\\Windows\\System32\\d3d11.dll").unwrap().as_ptr());
         pD3D11CreateDevice = Some(mem::transmute(GetProcAddress(hOriginal, CString::new("D3D11CreateDevice").unwrap().as_ptr())));
     }
