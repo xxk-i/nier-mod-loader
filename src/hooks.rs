@@ -34,10 +34,9 @@ pub mod hook_manager {
         let fn_load_cpk: fnLoadCPKFromPath = mem::transmute(ptr);
 
         for path in CPK_LIST.as_deref().unwrap() {
-            println!("Found cpk: {:#}", path.display());
+            println!("Loading cpk: {:#}", path.display());
 
             let cstr_path = CString::new(path.with_extension("").to_str().unwrap()).unwrap(); // remove extension
-            println!("{:#?}", cstr_path);
             let load_cpk_ret = fn_load_cpk(cstr_path);
 
             match load_cpk_ret {
