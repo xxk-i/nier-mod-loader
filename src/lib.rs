@@ -4,14 +4,14 @@ mod config;
 extern crate core;
 
 use std::{env, mem, ptr, thread, time};
-use std::ffi::CString;
+use std::ffi::{CStr, CString};
 use std::fs::File;
 use std::path::{Path, PathBuf};
 use std::ptr::null_mut;
 use winapi::shared::minwindef;
 use winapi::shared::minwindef::{BOOL, DWORD, HINSTANCE, HMODULE, LPVOID, UINT};
-use winapi::um::libloaderapi::{GetModuleHandleA, GetProcAddress, LoadLibraryA};
-use winapi::shared::ntdef::{HRESULT, NULL};
+use winapi::um::libloaderapi::{GetModuleFileNameA, GetModuleHandleA, GetProcAddress, LoadLibraryA};
+use winapi::shared::ntdef::{HRESULT, LPSTR, NULL};
 use dll_syringe::{ Syringe, process::OwnedProcess };
 use winapi::um::winnt::LPCSTR;
 use glob::glob;
@@ -23,6 +23,7 @@ use winapi::um::d3dcommon::{D3D_DRIVER_TYPE, D3D_FEATURE_LEVEL};
 
 type _D3D11CreateDevice = extern "stdcall" fn(*mut IDXGIAdapter, D3D_DRIVER_TYPE, HMODULE, UINT, *const D3D_FEATURE_LEVEL, UINT, UINT, *mut *mut ID3D11Device, *mut D3D_FEATURE_LEVEL, *mut *mut ID3D11DeviceContext) -> HRESULT;
 
+static mut dllModule: HINSTANCE = ptr::null_mut();
 static mut hOriginal: HINSTANCE = ptr::null_mut();
 static mut pD3D11CreateDevice: Option<_D3D11CreateDevice> = None;
 
@@ -55,6 +56,7 @@ extern "system" fn DllMain(
 
     match call_reason {
         DLL_PROCESS_ATTACH => {
+            unsafe { dllModule = dll_module };
             let thread_handle = std::thread::spawn(initialize);
         },
         DLL_PROCESS_DETACH => (),
@@ -124,8 +126,27 @@ fn initialize() {
         if cfg!(debug_assertions) {
             AllocConsole();
         }
-        hOriginal = LoadLibraryA(CString::new("C:\\Windows\\System32\\d3d11.dll").unwrap().as_ptr());
-        pD3D11CreateDevice = Some(mem::transmute(GetProcAddress(hOriginal, CString::new("D3D11CreateDevice").unwrap().as_ptr())));
+
+        //Check if we are loaded as d3d11.dll or something else
+        //Note: these windows calls suck
+        let mut filename_buf = [0; 0x1000];
+        GetModuleFileNameA(dllModule, filename_buf.as_mut_ptr(), 0x1000);
+
+        let len = filename_buf.iter().take_while(|&&c| c != 0).count();
+        let mut module_filename = CStr::from_ptr(filename_buf.as_mut_ptr()).to_str();
+
+        match module_filename {
+            Ok(name) => {
+                if name.ends_with("d3d11.dll")
+                {
+                    println!("Installed as d3d11");
+                    hOriginal = LoadLibraryA(CString::new("C:\\Windows\\System32\\d3d11.dll").unwrap().as_ptr());
+                    pD3D11CreateDevice = Some(mem::transmute(GetProcAddress(hOriginal, CString::new("D3D11CreateDevice").unwrap().as_ptr())));
+                }
+            },
+
+            Err(err) => println!("Error resolving module filename... not loading d3d11"),
+        }
     }
 
     //let the game set the environment to data\\ for us...
