@@ -5,7 +5,7 @@ Requires nightly to build:
 `cargo +nightly build --release`
 
 ## Installation
-Place rename "mod-loader.dll" to "d3d11.dll" and place next to NieRAutomata.exe, OR inject/sideload by any other means early on game launch.
+Place rename "mod_loader.dll" to "d3d11.dll" and place next to NieRAutomata.exe, OR inject/sideload by any other means early on game launch.
 
 ## Known Issues
 If using SpecialK/FAR do not install as d3d11, instead configure SpecialK to load nier-mod-loader.
@@ -22,6 +22,7 @@ The mod loader will generate a config.ini inside `data\` split into a [DLL] and 
 This mod loader is still in it's very early stages, expect updates to *break* support for config.ini 
 
 ## Planned Updates (in order of importance)
+  - Refactor codebase to use a proper rust hooking library and reduce stink of winapi calls.
   - Add support for mod load order
   - Add support for loading `core\` files from mod CPK's
   - Add support for loading non-packed mod directories (non-cpk)
