@@ -25,6 +25,7 @@ This mod loader is still in it's very early stages, expect updates to *break* su
   - Refactor codebase to use a proper rust hooking library and reduce stink of winapi calls.
   - Add support for mod load order
   - Add support for loading `core\` files from mod CPK's
+  - Patch the 64 cpk mount limit
   - Add support for loading non-packed mod directories (non-cpk)
   
 ## Maybe Updates
