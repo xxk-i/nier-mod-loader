@@ -22,7 +22,8 @@ The mod loader will generate a config.ini inside `data\` split into a [DLL] and 
 This mod loader is still in it's very early stages, expect updates to *break* support for config.ini 
 
 ## Planned Updates (in order of importance)
-  - Refactor codebase to use a proper rust hooking library and reduce stink of winapi calls.
+  - ~~Refactor codebase to use a proper rust hooking library and reduce stink of winapi calls.~~ (kinda, uses detour-rs, still stinky)
+  - Add a `[DISABLED]` section to the config for mods no longer found
   - Add support for mod load order
   - Add support for loading `core\` files from mod CPK's
   - Patch the 64 cpk mount limit
