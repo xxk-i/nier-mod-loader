@@ -5,10 +5,18 @@ Requires nightly to build:
 `cargo +nightly build --release`
 
 ## Installation
-Place rename "mod_loader.dll" to "d3d11.dll" and place next to NieRAutomata.exe, OR inject/sideload by any other means early on game launch.
+Place rename "mod_loader.dll" to "d3d11.dll" and place in the same directory as the NieRAutomata.exe 
 
-## Known Issues
-If using SpecialK/FAR do not install as d3d11, instead configure SpecialK to load nier-mod-loader.
+## SpecialK/FAR
+If using SpecialK/FAR, place mod_loader.dll in the same directory as NieRAutomata.exe (but do not rename) and install SpecialK64.dll as dinput8.dll. Add the following to the end of dinput8.ini (this file is generated on first game launch)
+```
+[Import.ModLoader]
+Architecture=x64
+Role=ThirdParty
+When=PlugIn
+Blacklist=
+Filename=mod_loader.dll
+```
 
 ## Installing Mods
 The mod loader can load either CPK's or plugins (.dll). Place them into `data\mods\cpks\*` and `data\mods\plugins\*` respectively. The mod loader will search either folder recursively by file extension, so mods can be at any folder depth e.g.
