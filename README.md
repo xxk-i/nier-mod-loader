@@ -26,6 +26,15 @@ The mod loader can load either CPK's or plugins (.dll). Place them into `data\mo
 ## Configuring Mods
 The mod loader will generate a config.ini inside `data\` split into a [DLL] and [CPK] section. The format will be in `FILENAME=TRUE/FALSE` where `TRUE` means the mod will be loaded, and `FALSE` (or any other value) means the mod will *not* be loaded. The `FILENAME` will only be the stem -- no path, no extension -- so 2 CPK's or 2 plugins under the same name in but installed in different paths will be checked by the same config entry.
 
+## Game load order
+NieR:Automata loads files in the following order:
+  1. Non-DLC cpk's ( < data100.cpk)
+  2. DLC cpk's ( >= data100.cpk)
+  3. nier-mod-loader cpk's
+  4. Loose files (e.g. data\pl\pl000d.dat)
+  
+This means that any loose files will load *last* and if matching, will *overwrite* mod CPK's.
+
 ## Important
 This mod loader is still in it's very early stages, expect updates to *break* support for config.ini 
 
