@@ -13,7 +13,7 @@ If using SpecialK/FAR, place mod_loader.dll in the same directory as NieRAutomat
 [Import.ModLoader]
 Architecture=x64
 Role=ThirdParty
-When=PlugIn
+When=Early
 Blacklist=
 Filename=mod_loader.dll
 ```
