@@ -1,0 +1,3 @@
+[submodule "dll-syringe"]
+	path = dll-syringe
+	url = https://github.com/OpenByteDev/dll-syringe
