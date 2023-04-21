@@ -1,33 +1,43 @@
 mod hooks;
 mod config;
 
+use config::Config;
+use config::Plugin;
+
 extern crate core;
 
+use std::collections::HashMap;
+use std::error::Error;
 use std::{env, mem, ptr, thread, time};
 use std::ffi::{CStr, CString};
-use std::fs::File;
 use std::path::{Path, PathBuf};
-use std::ptr::null_mut;
 use winapi::shared::minwindef;
 use winapi::shared::minwindef::{BOOL, DWORD, HINSTANCE, HMODULE, LPVOID, UINT};
 use winapi::um::libloaderapi::{GetModuleFileNameA, GetModuleHandleA, GetProcAddress, LoadLibraryA};
-use winapi::shared::ntdef::{HRESULT, LPSTR, NULL};
-use dll_syringe::{ Syringe, process::OwnedProcess };
+use winapi::shared::ntdef::{HRESULT, NULL};
 use winapi::um::winnt::LPCSTR;
-use glob::glob;
+use glob::{glob};
 use winapi::shared::dxgi::IDXGIAdapter;
-use winapi::um::consoleapi;
 use winapi::um::consoleapi::AllocConsole;
 use winapi::um::d3d11::{ID3D11Device, ID3D11DeviceContext};
 use winapi::um::d3dcommon::{D3D_DRIVER_TYPE, D3D_FEATURE_LEVEL};
 
 type _D3D11CreateDevice = extern "stdcall" fn(*mut IDXGIAdapter, D3D_DRIVER_TYPE, HMODULE, UINT, *const D3D_FEATURE_LEVEL, UINT, UINT, *mut *mut ID3D11Device, *mut D3D_FEATURE_LEVEL, *mut *mut ID3D11DeviceContext) -> HRESULT;
 
+// cpp naming conventions (i think)
+#[allow(non_upper_case_globals)]
 static mut dllModule: HINSTANCE = ptr::null_mut();
+
+#[allow(non_upper_case_globals)]
 static mut hOriginal: HINSTANCE = ptr::null_mut();
+
+#[allow(non_upper_case_globals)]
 static mut pD3D11CreateDevice: Option<_D3D11CreateDevice> = None;
 
+static CONFIG_PATH: &str = ".\\mods\\config.ini";
+
 #[no_mangle]
+#[allow(non_snake_case)]
 pub unsafe extern "system" fn D3D11CreateDevice(pAdapter: *mut IDXGIAdapter,
                                                 DriverType: D3D_DRIVER_TYPE,
                                                 Software: HMODULE,
@@ -66,74 +76,48 @@ extern "system" fn DllMain(
     minwindef::TRUE
 }
 
-fn get_dlls() -> Option<Vec<PathBuf>> {
-    let mut dll_list = Vec::new();
-    for entry in glob(".\\mods\\plugins\\**\\*.dll").expect("Failed to search for plugins") {
+// Returns a hashmap of <Filestem, FullPath>
+fn get_files_by_glob(pattern: &str) -> Result<HashMap<String, PathBuf>, Box<dyn Error>> {
+    let mut map = HashMap::new();
+
+    for entry in glob(pattern)? {
         match entry {
             Ok(path) => {
-                println!("Found plugin at path: {:#?}", path.display());
-                dll_list.push(path);
+                println!("Found file at path: {:#?}", path.display());
+                map.insert(path.file_stem().unwrap().to_str().unwrap().to_owned(), path);
             }
             Err(e) => println!("{:#?}", e),
         }
     }
 
-    return if dll_list.is_empty() {
-        println!("No DLL's found - does data\\mods\\plugins\\ exist?");
-        None
-    } else {
-        Some(dll_list)
-    }
+    Ok(map)
 }
 
-fn get_cpks() -> Option<Vec<PathBuf>> {
+fn get_dlls() -> HashMap<String, PathBuf> {
+    println!("Getting dll's");
+    get_files_by_glob(".\\mods\\plugins\\**\\*.dll").expect("Failed to search for plugins")
+}
+
+fn get_cpks() -> HashMap<String, PathBuf> {
     println!("Getting cpk's");
-    let mut cpk_list = Vec::new();
-
-    for entry in glob(".\\mods\\cpks\\**\\*.cpk").expect("Failed to search for cpk's") {
-        match entry {
-            Ok(path) => {
-                println!("Found mod at path: {:#?}", path.display());
-                cpk_list.push(path);
-            }
-            Err(e) => println!("{:#?}", e),
-        }
-    }
-
-    return if cpk_list.is_empty() {
-        println!("No CPK's found - does data\\mods\\cpks\\ exist?");
-        None
-    } else {
-        Some(cpk_list)
-    }
+    get_files_by_glob(".\\mods\\cpks\\**\\*.cpk").expect("Failed to search for cpk's")
 }
 
-fn load_plugins(dll_list: Vec<PathBuf>) {
-    let target_process = OwnedProcess::find_first_by_name("NieRAutomata").unwrap();
-
-    let syringe = Syringe::for_process(target_process);
-
-    for path in dll_list {
-        match syringe.inject(path) {
-            Ok(_) => println!("Successfully injected!"),
-            Err(e) => println!("{:#?}", e),
-        }
-    }
-}
 
 fn initialize() {
+
+    //Check if we are loaded as d3d11.dll or something else
+    //Note: these windows calls suck
     unsafe {
         if cfg!(debug_assertions) {
             AllocConsole();
         }
 
-        //Check if we are loaded as d3d11.dll or something else
-        //Note: these windows calls suck
+        // Windows MAX_PATH is supposedly 256 characters, but I am paranoid and don't trust Windows, so we use 0x1000 byte buffer size for a filepath
         let mut filename_buf = [0; 0x1000];
         GetModuleFileNameA(dllModule, filename_buf.as_mut_ptr(), 0x1000);
 
-        let len = filename_buf.iter().take_while(|&&c| c != 0).count();
-        let mut module_filename = CStr::from_ptr(filename_buf.as_mut_ptr()).to_str();
+        let module_filename = CStr::from_ptr(filename_buf.as_mut_ptr()).to_str();
 
         match module_filename {
             Ok(name) => {
@@ -145,7 +129,7 @@ fn initialize() {
                 }
             },
 
-            Err(err) => println!("Error resolving module filename... not loading d3d11"),
+            Err(e) => println!("Error resolving module filename... {}... not loading d3d11", e),
         }
     }
 
@@ -156,32 +140,57 @@ fn initialize() {
 
     println!("Initializing...");
 
-    let dll_list: Option<Vec<PathBuf>> = get_dlls();
-    let cpk_list: Option<Vec<PathBuf>> = get_cpks();
+    // collect all mod files found in directory
+    let dlls: HashMap<String, PathBuf> = get_dlls();
+    let cpks: HashMap<String, PathBuf> = get_cpks();
 
-    if !config::config_manager::config_exists() {
-        config::config_manager::create_config(&dll_list, &cpk_list);
-    }
+    // load or create config
+    let mut config = match Path::new(CONFIG_PATH).exists() {
+        true => {
+            Config::from(PathBuf::from(CONFIG_PATH))
+        },
 
-    if let Some(cpk_list) = cpk_list {
-        let cpk_load_list = config::config_manager::parse_cpk_list(cpk_list);
-        if !cpk_load_list.is_empty() {
-            unsafe {
-                println!("Installing Hooks...");
-                hooks::hook_manager::CPK_LIST = Some(cpk_load_list);
-                hooks::hook_manager::MODULE_HANDLE = GetModuleHandleA(NULL as LPCSTR);
-                match hooks::hook_manager::create_all_hooks() {
-                    Ok(_) => println!("Hooked successfully!"),
-                    Err(e) => eprintln!("{}", e),
-                }
+        false => {
+            Config::new(PathBuf::from(CONFIG_PATH))
+        }
+    };
+
+    let dlls_to_load: Vec<Plugin> = config.parse_dlls(dlls);
+    let cpks_to_load: Vec<PathBuf> = config.parse_cpks(cpks);
+
+    config.save();
+
+    if !cpks_to_load.is_empty() {
+        unsafe {
+            println!("Installing Hooks...");
+            hooks::hook_manager::CPK_LIST = Some(cpks_to_load);
+            hooks::hook_manager::MODULE_HANDLE = GetModuleHandleA(NULL as LPCSTR);
+            match hooks::hook_manager::create_all_hooks() {
+                Ok(_) => println!("Hooked successfully!"),
+                Err(e) => eprintln!("{}", e),
             }
         }
     }
 
-    if let Some(dll_list) = dll_list {
-        let dll_load_list = config::config_manager::parse_dll_list(dll_list);
-        if !dll_load_list.is_empty() {
-            load_plugins(dll_load_list);
+    if !dlls_to_load.is_empty() {
+        let mut early_plugins = Vec::new();
+        let mut late_plugins = Vec::new();
+
+        for entry in dlls_to_load {
+            match entry {
+                Plugin::Early(path) => early_plugins.push(path.clone()),
+                Plugin::Late(path) => late_plugins.push(path.clone())
+            }
+        }
+        
+        if !early_plugins.is_empty() {
+            hooks::hook_manager::load_plugins(&early_plugins);
+        }
+
+        if !late_plugins.is_empty() {
+            unsafe {
+                hooks::hook_manager::DLL_LATE_LOAD_LIST = Some(late_plugins);
+            }
         }
     }
 }
