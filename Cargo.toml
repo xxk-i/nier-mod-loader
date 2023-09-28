@@ -9,7 +9,7 @@ build = "build.rs"
 [dependencies]
 winapi = {version = "0.3.9", features = ["consoleapi", "minwindef", "libloaderapi", "ntdef", "d3d11", "dxgi", "d3dcommon"]}
 glob = "0.3.0"
-dll-syringe = {path = "dll-syringe"}
+dll-syringe = "0.15.2"
 retour = "0.1.0"
 rust-ini = "0.18.0"
 
